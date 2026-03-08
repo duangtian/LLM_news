@@ -47,13 +47,27 @@ class TechNewsFetcher(BaseFetcher):
             'Medium Data Science': 'https://medium.com/feed/tag/data-science',
             'Medium Space': 'https://medium.com/feed/tag/space',
             'Medium Blockchain': 'https://medium.com/feed/tag/blockchain',
-            'Medium Programming': 'https://medium.com/feed/tag/programming'
+            'Medium Programming': 'https://medium.com/feed/tag/programming',
+            # LLM / AI company & research blogs
+            'The Decoder': 'https://the-decoder.com/feed/',
+            'HuggingFace Blog': 'https://huggingface.co/blog/feed.xml',
+            'OpenAI News': 'https://openai.com/news/rss.xml',
+            'DeepMind Blog': 'https://deepmind.google/discover/blog/rss.xml',
+            'Google AI Blog': 'https://blog.research.google/feeds/posts/default',
+            'Towards Data Science': 'https://medium.com/feed/towards-data-science',
+            'Analytics Vidhya': 'https://medium.com/feed/analytics-vidhya',
+            # Space
+            'ESA News': 'https://www.esa.int/rssfeed/Our_Activities/Space_News',
+            'SpaceX Updates': 'https://www.spacex.com/updates/index.xml',
+            'Space.com': 'https://www.space.com/feeds/all',
+            # Hacker News (AI/LLM filter)
+            'Hacker News AI': 'https://hnrss.org/frontpage?q=AI+LLM+transformer',
         }
         
         # GitHub trending API for popular AI projects
         self.github_api_base = "https://api.github.com"
         
-        logger.debug(f"Tech News fetcher initialized with {len(self.tech_feeds)} feeds (including Medium)")
+        logger.debug(f"Tech News fetcher initialized with {len(self.tech_feeds)} feeds (Medium, AI blogs, Space)")
     
     def _parse_date(self, date_string: str) -> Optional[datetime]:
         """Parse date string to datetime object"""
@@ -177,13 +191,18 @@ class TechNewsFetcher(BaseFetcher):
             # Generate meaningful abstract
             abstract = summary if summary else f"Technology news from {feed_name}: {title}"
             
+            pub_dt = self._parse_date(published)
+            # Ensure timezone-aware (UTC) or naive consistency
+            if pub_dt and pub_dt.tzinfo is None:
+                # treat as UTC naive
+                pass
             return PaperMetadata(
                 title=title,
                 authors=authors,
                 abstract=abstract,
                 url=link,
                 source=self.source_name,
-                published_at=self._parse_date(published),
+                published_at=pub_dt,
                 categories=categories,
                 tags=self._extract_tech_keywords(title, summary)
             )

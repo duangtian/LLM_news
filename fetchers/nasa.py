@@ -132,13 +132,14 @@ class NASAFetcher(BaseFetcher):
                 if technology_areas:
                     categories.append(technology_areas.get('name', ''))
                 
+                pub_val = start_date or datetime.now().strftime('%Y-%m-%d')
                 return PaperMetadata(
                     title=title,
                     authors=['NASA'],
                     abstract=abstract,
                     url=f"https://techport.nasa.gov/view/{project_id}",
                     source=self.source_name,
-                    published_at=start_date or datetime.now().strftime('%Y-%m-%d'),
+                    published_at=pub_val,
                     categories=categories,
                     tags=self._extract_space_keywords(title, abstract)
                 )

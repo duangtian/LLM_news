@@ -29,6 +29,20 @@ except ImportError:
     TECH_NEWS_AVAILABLE = False
     logger.warning("Tech News fetcher not available")
 
+try:
+    from .youtube_fetcher import create_youtube_fetcher
+    YOUTUBE_AVAILABLE = True
+except ImportError:
+    YOUTUBE_AVAILABLE = False
+    logger.warning("YouTube fetcher not available")
+
+try:
+    from .academic_fetcher import create_academic_fetcher
+    ACADEMIC_AVAILABLE = True
+except ImportError:
+    ACADEMIC_AVAILABLE = False
+    logger.warning("Academic fetcher not available")
+
 
 class FetcherManager:
     """Manages multiple paper fetchers"""
@@ -56,6 +70,14 @@ class FetcherManager:
         # Add Tech News if available
         if TECH_NEWS_AVAILABLE:
             fetcher_factories['tech_news'] = create_tech_news_fetcher
+
+        # Add YouTube if available
+        if YOUTUBE_AVAILABLE:
+            fetcher_factories['youtube'] = create_youtube_fetcher
+
+        # Add Academic (LLM-focused) if available
+        if ACADEMIC_AVAILABLE:
+            fetcher_factories['academic'] = create_academic_fetcher
         
         for name, factory in fetcher_factories.items():
             try:

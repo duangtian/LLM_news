@@ -374,6 +374,20 @@ class DiscordPoster:
             logger.error(f"Error posting test message: {e}")
             return {'success': False, 'error': str(e)}
 
+    # Backwards compatibility convenience method
+    def post_embeds(self, embeds: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Post raw embeds directly (compat wrapper).
+        Some pipeline paths call discord_poster.post_embeds([...]) when there are no papers.
+        """
+        try:
+            if self.dry_run:
+                logger.info(f"DRY RUN: Would post {len(embeds)} embeds (compat)")
+                return {'success': True, 'dry_run': True, 'embed_count': len(embeds)}
+            return self.poster.post_embeds(embeds)
+        except Exception as e:
+            logger.error(f"Error in compat post_embeds: {e}")
+            return {'success': False, 'error': str(e)}
+
 
 def create_discord_poster(config: Dict[str, Any]) -> DiscordPoster:
     """Factory function to create Discord poster"""

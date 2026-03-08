@@ -3,7 +3,7 @@ Content filtering and ranking pipeline for papers
 """
 import re
 from typing import List, Dict, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 
 from storage.models import PaperCreate
@@ -131,7 +131,7 @@ class ContentFilter:
     def _passes_category_filter(self, paper: PaperCreate) -> bool:
         """Check category filtering"""
         # Always allow news sources regardless of academic category filters
-        if paper.source in {"tech_news", "nasa"}:
+        if paper.source in {"tech_news", "nasa", "youtube", "academic"}:
             return True
         allowed_categories = self._parse_keywords(self.config.get('ARXIV_CATEGORIES', ''))
         
@@ -154,9 +154,28 @@ class ContentFilter:
         if not paper.published_at:
             return True  # No date to filter on
         
-        # Only include papers from last 30 days
+        # Normalize datetime to UTC naive for comparison
+        pub = paper.published_at
+        try:
+            if isinstance(pub, str):
+                # Attempt simple parsing for common formats
+                for fmt in ('%Y-%m-%d', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S'):
+                    try:
+                        pub_dt = datetime.strptime(pub[:len(fmt)], fmt)
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    return True  # if unparseable, do not filter out
+                pub = pub_dt
+            if pub.tzinfo is not None:
+                pub = pub.astimezone(timezone.utc).replace(tzinfo=None)
+        except Exception as e:
+            logger.debug(f"Date parse issue for {paper.title[:40]}: {e}")
+            return True
+
         cutoff = datetime.utcnow() - timedelta(days=30)
-        if paper.published_at < cutoff:
+        if pub < cutoff:
             logger.debug(f"Too old: {paper.title[:50]}")
             return False
         
@@ -211,7 +230,7 @@ class PaperRanker:
         
         # Source preference (10% of score) with slight boost for curated news sources so they aren't dominated by arxiv
         base_source_score = self._source_score(paper.source)
-        if paper.source in {"tech_news", "nasa"}:
+        if paper.source in {"tech_news", "nasa", "youtube", "academic"}:
             base_source_score = min(1.0, base_source_score + 0.15)  # modest boost
         score += base_source_score * 0.1
         

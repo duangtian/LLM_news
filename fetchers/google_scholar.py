@@ -56,6 +56,11 @@ class GoogleScholarFetcher(BaseFetcher):
             logger.warning("No keywords provided for Google Scholar search")
             return []
         
+        import signal
+
+        def _timeout_handler(signum, frame):
+            raise TimeoutError("Google Scholar fetch timed out")
+
         try:
             papers = []
             
@@ -63,28 +68,44 @@ class GoogleScholarFetcher(BaseFetcher):
             query = self._build_search_query(keywords)
             logger.info(f"Searching Google Scholar with query: {query}")
             
-            # Search papers
-            search_query = scholarly.search_pubs(query)
-            
-            count = 0
-            for result in search_query:
-                if count >= max_results:
-                    break
-                
+            # Wrap with a thread-based timeout so it never hangs the whole pipeline
+            import threading
+            result_holder = []
+            error_holder = []
+
+            def _do_fetch():
                 try:
-                    paper = self._parse_scholar_result(result)
-                    if paper and self._is_recent_paper(paper, hours_back):
-                        papers.append(paper)
-                        count += 1
-                        logger.debug(f"Parsed paper: {paper.title[:50]}...")
-                    
-                    # Rate limiting
-                    time.sleep(1.0 / self.rate_limit)
-                    
+                    search_query = scholarly.search_pubs(query)
+                    count = 0
+                    for result in search_query:
+                        if count >= max_results:
+                            break
+                        try:
+                            paper = self._parse_scholar_result(result)
+                            if paper and self._is_recent_paper(paper, hours_back):
+                                result_holder.append(paper)
+                                count += 1
+                                logger.debug(f"Parsed paper: {paper.title[:50]}...")
+                            time.sleep(1.0 / self.rate_limit)
+                        except Exception as e:
+                            logger.warning(f"Error parsing Google Scholar result: {e}")
+                            continue
                 except Exception as e:
-                    logger.warning(f"Error parsing Google Scholar result: {e}")
-                    continue
-            
+                    error_holder.append(e)
+
+            SCHOLAR_TIMEOUT = 30  # seconds max
+            t = threading.Thread(target=_do_fetch, daemon=True)
+            t.start()
+            t.join(timeout=SCHOLAR_TIMEOUT)
+            if t.is_alive():
+                logger.warning(f"Google Scholar fetch timed out after {SCHOLAR_TIMEOUT}s, skipping")
+                return []
+
+            if error_holder:
+                logger.error(f"Error fetching from Google Scholar: {error_holder[0]}")
+                return []
+
+            papers = result_holder
             logger.info(f"Fetched {len(papers)} papers from Google Scholar")
             return papers
             
