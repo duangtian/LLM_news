@@ -34,6 +34,8 @@ class Config:
             'ENABLE_GOOGLE_SCHOLAR': self._get_bool('ENABLE_GOOGLE_SCHOLAR', False),
             'ENABLE_NASA': self._get_bool('ENABLE_NASA', False),
             'ENABLE_TECH_NEWS': self._get_bool('ENABLE_TECH_NEWS', False),
+            'ENABLE_YOUTUBE': self._get_bool('ENABLE_YOUTUBE', False),
+            'ENABLE_ACADEMIC': self._get_bool('ENABLE_ACADEMIC', False),
             
             # API Keys
             'SEMANTIC_SCHOLAR_API_KEY': os.getenv('SEMANTIC_SCHOLAR_API_KEY'),
@@ -54,6 +56,16 @@ class Config:
             'RATE_LIMIT_TECH_NEWS': self._get_int('RATE_LIMIT_TECH_NEWS', 15),
             'MAX_PAPERS_TECH_NEWS': self._get_int('MAX_PAPERS_TECH_NEWS', 25),
             'TECH_NEWS_DAYS_BACK': self._get_int('TECH_NEWS_DAYS_BACK', 3),
+            
+            # === YouTube Configuration ===
+            'YOUTUBE_API_KEY': os.getenv('YOUTUBE_API_KEY'),
+            'MAX_PAPERS_YOUTUBE': self._get_int('MAX_PAPERS_YOUTUBE', 15),
+            'YOUTUBE_DAYS_BACK': self._get_int('YOUTUBE_DAYS_BACK', 7),
+            
+            # === Academic Configuration ===
+            'MAX_PAPERS_ACADEMIC': self._get_int('MAX_PAPERS_ACADEMIC', 30),
+            'ACADEMIC_DAYS_BACK': self._get_int('ACADEMIC_DAYS_BACK', 14),
+            'MIN_NEWS_QUOTA': self._get_int('MIN_NEWS_QUOTA', 3),
             
             # === Content Filtering ===
             'KEYWORDS_INCLUDE': os.getenv('KEYWORDS_INCLUDE', 'LLM,diffusion,machine learning,AI,deep learning,neural network'),
