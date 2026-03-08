@@ -8,6 +8,7 @@ Sources:
 Designed for ป.ตรี–เอก level academic content.
 """
 import time
+import threading
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import requests
@@ -176,7 +177,25 @@ class AcademicFetcher(BaseFetcher):
         if not FEEDPARSER_AVAILABLE:
             return []
         try:
-            feed = feedparser.parse(HF_PAPERS_RSS)
+            feed_result = [None]
+
+            def _parse(out=feed_result):
+                try:
+                    out[0] = feedparser.parse(HF_PAPERS_RSS)
+                except Exception:
+                    out[0] = None
+
+            t = threading.Thread(target=_parse, daemon=True)
+            t.start()
+            t.join(timeout=15)
+            if t.is_alive():
+                logger.warning("HuggingFace Papers RSS timeout — skipping")
+                return []
+
+            feed = feed_result[0]
+            if feed is None:
+                return []
+
             for entry in feed.entries[:10]:
                 try:
                     title = entry.get("title", "").strip()

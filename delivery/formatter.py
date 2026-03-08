@@ -37,10 +37,9 @@ class DiscordFormatter:
                 logger.error(f"Error formatting paper {paper.title[:50]}: {e}")
                 continue
         
-        # Add header embed if multiple papers
-        if len(embeds) > 1:
-            header_embed = self._create_header_embed(len(embeds))
-            embeds.insert(0, header_embed)
+        # Add header embed
+        header_embed = self._create_header_embed(len(embeds), papers_with_summaries)
+        embeds.insert(0, header_embed)
         
         logger.info(f"Created {len(embeds)} Discord embeds")
         return embeds
@@ -51,8 +50,8 @@ class DiscordFormatter:
         # Format title
         title = self._format_title(paper.title, position)
         
-        # Format description (summary + TL;DR)
-        description = self._format_description(summary.summary_thai, summary.tldr_thai)
+        # Format description — show full summary + abstract excerpt + TL;DR
+        description = self._format_description_rich(paper, summary)
         
         # Format authors
         authors_text = self._format_authors(paper.authors)
@@ -66,49 +65,85 @@ class DiscordFormatter:
         # Choose color based on source
         color = self._get_source_color(paper.source)
         
+        # Build fields — richer than before
+        fields = [
+            {
+                "name": "✍️ ผู้แต่ง / เจ้าของ",
+                "value": authors_text,
+                "inline": True
+            },
+            {
+                "name": "� แหล่งที่มา",
+                "value": source_text,
+                "inline": True
+            },
+        ]
+
+        # Add arXiv ID / DOI if available
+        ref_parts = []
+        if paper.arxiv_id:
+            ref_parts.append(f"arXiv: `{paper.arxiv_id}`")
+        if hasattr(paper, 'doi') and paper.doi:
+            ref_parts.append(f"DOI: `{paper.doi}`")
+        if ref_parts:
+            fields.append({
+                "name": "🔗 อ้างอิง",
+                "value": "\n".join(ref_parts),
+                "inline": True
+            })
+
+        fields.append({
+            "name": "🏷️ หมวดหมู่ / แท็ก",
+            "value": tags_text,
+            "inline": False
+        })
+
         # Build embed
         embed = {
             "title": title,
             "description": description,
             "url": paper.url,
             "color": color,
-            "fields": [
-                {
-                    "name": "📝 ผู้แต่ง",
-                    "value": authors_text,
-                    "inline": True
-                },
-                {
-                    "name": "📊 แหล่งที่มา",
-                    "value": source_text,
-                    "inline": True
-                },
-                {
-                    "name": "🏷️ หมวดหมู่",
-                    "value": tags_text,
-                    "inline": False
-                }
-            ],
+            "fields": fields,
             "footer": {
-                "text": f"สร้างอัตโนมัติ • {self._get_current_time_str()}"
+                "text": f"{self._source_icon(paper.source)}  {self._get_current_time_str()} (Bangkok)  •  LLM News Bot"
             }
         }
         
-        # Add thumbnail for arXiv papers
-        if paper.source == "arxiv" and paper.arxiv_id:
-            # Note: arXiv doesn't provide thumbnails, but we can use a generic science icon
-            embed["thumbnail"] = {
-                "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/ArXiv_web.svg/250px-ArXiv_web.svg.png"
-            }
+        # Thumbnail by source
+        thumb = self._get_source_thumbnail(paper.source, getattr(paper, 'arxiv_id', None))
+        if thumb:
+            embed["thumbnail"] = {"url": thumb}
         
         return embed
     
-    def _create_header_embed(self, paper_count: int) -> Dict[str, Any]:
-        """Create header embed for multiple papers"""
+    def _create_header_embed(self, paper_count: int, papers_with_summaries=None) -> Dict[str, Any]:
+        """Create header embed for the daily digest"""
+        # Count by source
+        source_counts = {}
+        if papers_with_summaries:
+            for paper, _ in papers_with_summaries:
+                src = paper.source
+                source_counts[src] = source_counts.get(src, 0) + 1
+
+        source_lines = []
+        icon_map = {
+            "academic":  "📚", "arxiv": "📄", "tech_news": "📰",
+            "nasa": "🚀", "crossref": "🔬", "youtube": "▶️",
+        }
+        for src, cnt in sorted(source_counts.items(), key=lambda x: -x[1]):
+            icon = icon_map.get(src, "🌐")
+            source_lines.append(f"{icon} **{src}**: {cnt} รายการ")
+
+        sources_text = "\n".join(source_lines) if source_lines else "หลายแหล่ง"
+
         return {
-            "title": "🔬 ข่าวงานวิจัย AI & ML ประจำวัน",
-            "description": f"พบงานวิจัยน่าสนใจ **{paper_count}** เรื่องจากแหล่งข้อมูลต่างๆ",
-            "color": 0x5865F2,  # Discord blurple
+            "title": "🤖 LLM News Bot — สรุปข่าว AI & Tech ประจำวัน",
+            "description": (
+                f"📥 พบข่าวและงานวิจัยที่น่าสนใจทั้งหมด **{paper_count} รายการ** วันนี้\n\n"
+                f"**แหล่งที่มา:**\n{sources_text}"
+            ),
+            "color": 0x5865F2,
             "timestamp": datetime.utcnow().isoformat(),
             "fields": [
                 {
@@ -117,13 +152,21 @@ class DiscordFormatter:
                     "inline": True
                 },
                 {
-                    "name": "⏰ เวลา",
+                    "name": "⏰ เวลา (Bangkok)",
                     "value": self._get_current_time_str(),
                     "inline": True
+                },
+                {
+                    "name": "🗂️ หมวดหมู่",
+                    "value": "LLM · Transformer · AI · Space · IT · วิจัย",
+                    "inline": False
                 }
-            ]
+            ],
+            "footer": {
+                "text": "สร้างอัตโนมัติโดย LLM News Bot"
+            }
         }
-    
+
     def _create_no_papers_embed(self) -> Dict[str, Any]:
         """Create embed when no papers found"""
         return {
@@ -134,6 +177,58 @@ class DiscordFormatter:
                 "text": f"ตรวจสอบเมื่อ • {self._get_current_time_str()}"
             }
         }
+
+    # ------------------------------------------------------------------ #
+    #  Rich description builder                                           #
+    # ------------------------------------------------------------------ #
+    def _format_description_rich(self, paper, summary) -> str:
+        """Build a rich description: summary (Thai) + abstract excerpt + TL;DR"""
+        parts = []
+
+        # Thai summary
+        if summary.summary_thai and len(summary.summary_thai) > 20:
+            parts.append(summary.summary_thai)
+
+        # Abstract excerpt (first 300 chars) — useful when summary is short
+        if paper.abstract and len(paper.abstract) > 40:
+            excerpt = paper.abstract[:350].rstrip()
+            if len(paper.abstract) > 350:
+                excerpt += "…"
+            parts.append(f"```{excerpt}```")
+
+        # TL;DR
+        if summary.tldr_thai and len(summary.tldr_thai) > 5:
+            parts.append(f"**📌 TL;DR:** {summary.tldr_thai}")
+
+        description = "\n\n".join(parts) if parts else "ไม่มีข้อมูลสรุป"
+
+        if len(description) > self.max_description_length:
+            description = description[:self.max_description_length - 3] + "…"
+
+        return description
+
+    def _source_icon(self, source: str) -> str:
+        icons = {
+            "arxiv": "📄 arXiv",
+            "academic": "📚 Academic",
+            "tech_news": "📰 Tech News",
+            "nasa": "🚀 NASA",
+            "crossref": "🔬 Crossref",
+            "youtube": "▶️ YouTube",
+        }
+        return icons.get(source.lower(), f"🌐 {source}")
+
+    def _get_source_thumbnail(self, source: str, arxiv_id: str = None) -> Optional[str]:
+        thumbs = {
+            "arxiv": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/ArXiv_web.svg/250px-ArXiv_web.svg.png",
+            "academic": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/ArXiv_web.svg/250px-ArXiv_web.svg.png",
+            "nasa": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/NASA_logo.svg/200px-NASA_logo.svg.png",
+            "youtube": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/159px-YouTube_full-color_icon_%282017%29.svg.png",
+            "tech_news": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Feed-icon.svg/128px-Feed-icon.svg.png",
+        }
+        return thumbs.get(source.lower())
+
+
     
     def _format_title(self, title: str, position: int) -> str:
         """Format paper title for embed"""
@@ -226,12 +321,16 @@ class DiscordFormatter:
     def _get_source_color(self, source: str) -> int:
         """Get color based on source"""
         colors = {
-            'arxiv': 0xB31B1B,      # arXiv red
-            'crossref': 0x2E8B57,   # Sea green
-            'biorxiv': 0x4682B4,    # Steel blue
-            'medrxiv': 0x9932CC,    # Dark orchid
+            'arxiv':    0xB31B1B,   # arXiv red
+            'academic': 0xE05A2B,   # warm orange-red (research)
+            'crossref': 0x2E8B57,   # sea green
+            'biorxiv':  0x4682B4,   # steel blue
+            'medrxiv':  0x9932CC,   # dark orchid
+            'nasa':     0x0B3D91,   # NASA blue
+            'tech_news':0x5865F2,   # Discord blurple
+            'youtube':  0xFF0000,   # YouTube red
         }
-        return colors.get(source.lower(), 0x808080)  # Gray as default
+        return colors.get(source.lower(), 0x57F287)  # green as default
     
     def _get_current_time_str(self) -> str:
         """Get current time as localized string"""

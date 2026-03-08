@@ -2,6 +2,7 @@
 Technology and AI news fetcher from multiple sources
 """
 import time
+import threading
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import requests
@@ -128,13 +129,28 @@ class TechNewsFetcher(BaseFetcher):
         for feed_name, feed_url in self.tech_feeds.items():
             try:
                 logger.debug(f"Fetching from {feed_name}")
-                
-                feed = feedparser.parse(feed_url)
-                
-                if not hasattr(feed, 'entries'):
+
+                # Parse with 15-second timeout using a daemon thread
+                feed_result = [None]
+
+                def _parse(url=feed_url, out=feed_result):
+                    try:
+                        out[0] = feedparser.parse(url)
+                    except Exception:
+                        out[0] = None
+
+                t = threading.Thread(target=_parse, daemon=True)
+                t.start()
+                t.join(timeout=15)
+                if t.is_alive():
+                    logger.warning(f"Timeout fetching {feed_name} — skipping")
+                    continue
+
+                feed = feed_result[0]
+                if feed is None or not hasattr(feed, 'entries'):
                     continue
                 
-                for entry in feed.entries[:5]:  # Limit per feed
+                for entry in feed.entries[:10]:  # Limit per feed
                     try:
                         paper = self._parse_rss_entry(entry, feed_name, keywords, hours_back)
                         if paper:
